@@ -79,18 +79,17 @@ void setup() {
   display.clearDisplay();
 
   testdrawchar();      // Draw characters of the default font
-
   display.invertDisplay(true);
   delay(1000);
   display.invertDisplay(false);
   delay(1000);
-
 //  testanimate(logo_bmp, LOGO_WIDTH, LOGO_HEIGHT); // Animate bitmaps
 }
 
 void loop()
 {
   CheckEnc();
+  delay(2);
 }
 
 void CheckEnc()

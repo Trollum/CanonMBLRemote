@@ -1,14 +1,17 @@
 #define outputA 21
 #define outputB 17
 #define EncoderButton 22
- 
-int counter = 0; 
+
 int aState;
 int aLastState;
 unsigned long lastDebounceTime;
+unsigned long StartFrameTime;
+unsigned long StartPauseTime;
 int PrevButtonState;
+bool StateChanged;
+Shutter ShutterStateTemp;
 
-const unsigned long SettingChangeThd = 100;
+const unsigned long SettingChangeThd = 50;
 const unsigned long StateChangeThd = 1000;
  
 void InitEncoder()
@@ -25,21 +28,37 @@ void InitEncoder()
     FrameTimePrev = 1;
     FramePausePrev = 1;
     ShutterStatePrev = Stop;
+    ShutterStateTemp = Stop;
 
     lastDebounceTime = 0;
+    StartFrameTime = 0;
+    StartPauseTime = 0;
     PrevButtonState = LOW;
+    StateChanged = false;
 
     pinMode(outputA, INPUT);
     pinMode(outputB, INPUT);
+    pinMode(EncoderButton, INPUT_PULLUP);
     aLastState = digitalRead(outputA);
 }
 
 void EncStateMachine()
 {
-    int ButtonState = digitalRead(EncoderButton);
+    int ButtonState;
+    
+    ButtonState = digitalRead(EncoderButton);
     if (ButtonState != PrevButtonState)
     {
         lastDebounceTime = millis();
+    }
+
+    // button was released, so State Machine might change it's state again
+    if (StateChanged == true)
+    {
+        if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == HIGH))
+        {
+            StateChanged = false;
+        }
     }
 
     if (ShutterState == Stop)
@@ -47,12 +66,14 @@ void EncStateMachine()
         switch (SettingSelected)
         {
             case Frames:
-                UpdateEncoder(&FrameCntr);
+                FrameCntr = UpdateEncoder(FrameCntr);
                 FrameCntr = RangeLimiter(FrameCntr, 1, 250);
 
-                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == HIGH))
+                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
                     SettingSelected = Duration;
+                    Serial.println("New state: Duration");
+                    StateChanged = true;        //state changed, prevent from next changes
                 }
 
                 if (FrameCntr != FrameCntrPrev)
@@ -65,12 +86,14 @@ void EncStateMachine()
                 break;
 
             case Duration:
-                UpdateEncoder(&FrameTime);
+                FrameTime = UpdateEncoder(FrameTime);
                 FrameTime = RangeLimiter(FrameTime, 1, 600);
 
-                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == HIGH))
+                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
                     SettingSelected = Pause;
+                    Serial.println("New state: Pause");
+                    StateChanged = true;        //state changed, prevent from next changes
                 }
 
                 if (FrameTime != FrameTimePrev)
@@ -83,12 +106,14 @@ void EncStateMachine()
                 break;
 
             case Pause:
-                UpdateEncoder(&FramePause);
+                FramePause = UpdateEncoder(FramePause);
                 FramePause = RangeLimiter(FramePause, 1, 60);
 
-                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == HIGH))
+                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
                     SettingSelected = Execute;
+                    Serial.println("New state: Execute");
+                    StateChanged = true;        //state changed, prevent from next changes
                 }
 
                 if (FramePause != FramePausePrev)
@@ -101,20 +126,29 @@ void EncStateMachine()
                 break;
 
             case Execute:
-                UpdateEncoderShutter(&ShutterState);
+                ShutterStateTemp = UpdateEncoderShutter(ShutterStateTemp);
 
-                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == HIGH))
+                if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
-                    SettingSelected = Frames;
+                    if (ShutterStateTemp == Running)
+                    {
+                        ShutterState = Running;
+                    }
+                    else
+                    {
+                        SettingSelected = Frames;
+                        Serial.println("New state: Frames");
+                        StateChanged = true;        //state changed, prevent from next changes
+                    }
                 }
 
-                if (ShutterState != ShutterStatePrev)
+                if (ShutterStateTemp != ShutterStatePrev)
                 {
                     Serial.print("State: ");
-                    Serial.println(ShutterState);
+                    Serial.println(ShutterStateTemp);
                 }
 
-                ShutterStatePrev = ShutterState;
+                ShutterStatePrev = ShutterStateTemp;
                 break;
 
             default:
@@ -123,47 +157,57 @@ void EncStateMachine()
     }
     else
     {
-        if (((millis() - lastDebounceTime) > StateChangeThd) && (ButtonState == HIGH))
+        if (((millis() - lastDebounceTime) > StateChangeThd) && (ButtonState == LOW) && (StateChanged == false))
         {
             ShutterState = Stop;
+            ShutterStatePrev = Stop;
+            ShutterStateTemp = Stop;
+            SettingSelected = Frames;
+            CurrFrame = 1;
+            StateChanged = true;
+            Serial.println("Return to settings: Frames");
         }
     }
+
+    PrevButtonState = ButtonState;
 }
 
-void UpdateEncoderShutter(Shutter *counterUpdate)
+Shutter UpdateEncoderShutter(Shutter counterUpdate)
 {
     aState = digitalRead(outputA);
     if (aState != aLastState)
     {
-        if (*counterUpdate == Stop)
+        if (counterUpdate == Stop)
         { 
-            *counterUpdate = Running;
+            counterUpdate = Running;
         }
         else
         {
-            *counterUpdate = Stop;
+            counterUpdate = Stop;
         }
     } 
 
     aLastState = aState; // Updates the previous state of the outputA with the current state
+    return counterUpdate;
 }
 
-void UpdateEncoder(int *counterUpdate)
+int UpdateEncoder(int counterUpdate)
 {
     aState = digitalRead(outputA);
     if (aState != aLastState)
     {
         if (digitalRead(outputB) != aState)
         { 
-            *counterUpdate++;
+            counterUpdate++;
         }
         else
         {
-            *counterUpdate--;
+            counterUpdate--;
         }
     } 
 
     aLastState = aState; // Updates the previous state of the outputA with the current state
+    return counterUpdate;
 }
 
 int RangeLimiter (int input, int minValue, int maxValue)
