@@ -1,15 +1,24 @@
 #define outputA 21
 #define outputB 17
 #define EncoderButton 22
+#define MAXFRAMECNTR 500
+#define MAXFRAMETIME 600
+#define MAXPAUSETIME 60
+
+int FrameCntrPrev;
+int CurrFramePrev;
+int FrameTimePrev;
+int FramePausePrev;
 
 int aState;
 int aLastState;
 unsigned long lastDebounceTime;
-unsigned long StartFrameTime;
-unsigned long StartPauseTime;
 int PrevButtonState;
 bool StateChanged;
-Shutter ShutterStateTemp;
+bool SequenceFinished;
+
+unsigned long StartFrameTime;
+unsigned long StartPauseTime;
 
 const unsigned long SettingChangeThd = 50;
 const unsigned long StateChangeThd = 1000;
@@ -19,7 +28,9 @@ void InitEncoder()
     FrameCntr = 1;
     CurrFrame = 1;
     FrameTime = 1;
+    CurrTime = 1;
     FramePause = 1;
+    PauseTime = 1;
     ShutterState = Stop;
     SettingSelected = Frames;
 
@@ -28,13 +39,17 @@ void InitEncoder()
     FrameTimePrev = 1;
     FramePausePrev = 1;
     ShutterStatePrev = Stop;
-    ShutterStateTemp = Stop;
+    ShutterStateInt = Stop;
 
     lastDebounceTime = 0;
-    StartFrameTime = 0;
-    StartPauseTime = 0;
     PrevButtonState = LOW;
     StateChanged = false;
+    SequenceFinished = false;
+
+    StartFrameTime = 0;
+    StartPauseTime = 0;
+    ExposureActive = false;
+    PauseActive = false;
 
     pinMode(outputA, INPUT);
     pinMode(outputB, INPUT);
@@ -67,88 +82,88 @@ void EncStateMachine()
         {
             case Frames:
                 FrameCntr = UpdateEncoder(FrameCntr);
-                FrameCntr = RangeLimiter(FrameCntr, 1, 250);
+                FrameCntr = RangeLimiter(FrameCntr, 1, MAXFRAMECNTR);
 
                 if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
                     SettingSelected = Duration;
-                    Serial.println("New state: Duration");
+                    // Serial.println("New state: Duration");
                     StateChanged = true;        //state changed, prevent from next changes
                 }
 
-                if (FrameCntr != FrameCntrPrev)
-                {
-                    Serial.print("Frame number: ");
-                    Serial.println(FrameCntr);
-                }
+                // if (FrameCntr != FrameCntrPrev)
+                // {
+                //     Serial.print("Frame number: ");
+                //     Serial.println(FrameCntr);
+                // }
 
                 FrameCntrPrev = FrameCntr;
                 break;
 
             case Duration:
                 FrameTime = UpdateEncoder(FrameTime);
-                FrameTime = RangeLimiter(FrameTime, 1, 600);
+                FrameTime = RangeLimiter(FrameTime, 1, MAXFRAMETIME);
 
                 if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
                     SettingSelected = Pause;
-                    Serial.println("New state: Pause");
+                    // Serial.println("New state: Pause");
                     StateChanged = true;        //state changed, prevent from next changes
                 }
 
-                if (FrameTime != FrameTimePrev)
-                {
-                    Serial.print("Frame number: ");
-                    Serial.println(FrameTime);
-                }
+                // if (FrameTime != FrameTimePrev)
+                // {
+                //     Serial.print("Frame number: ");
+                //     Serial.println(FrameTime);
+                // }
 
                 FrameTimePrev = FrameTime;
                 break;
 
             case Pause:
                 FramePause = UpdateEncoder(FramePause);
-                FramePause = RangeLimiter(FramePause, 1, 60);
+                FramePause = RangeLimiter(FramePause, 1, MAXPAUSETIME);
 
                 if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
                     SettingSelected = Execute;
-                    Serial.println("New state: Execute");
+                    // Serial.println("New state: Execute");
                     StateChanged = true;        //state changed, prevent from next changes
                 }
 
-                if (FramePause != FramePausePrev)
-                {
-                    Serial.print("Frame pause: ");
-                    Serial.println(FramePause);
-                }
+                // if (FramePause != FramePausePrev)
+                // {
+                //     Serial.print("Frame pause: ");
+                //     Serial.println(FramePause);
+                // }
 
                 FramePausePrev = FramePause;
                 break;
 
             case Execute:
-                ShutterStateTemp = UpdateEncoderShutter(ShutterStateTemp);
+                ShutterStateInt = UpdateEncoderShutter(ShutterStateInt);
 
                 if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
-                    if (ShutterStateTemp == Running)
+                    if (ShutterStateInt == Running)
                     {
                         ShutterState = Running;
                     }
                     else
                     {
                         SettingSelected = Frames;
-                        Serial.println("New state: Frames");
+                        // Serial.println("New state: Frames");
                         StateChanged = true;        //state changed, prevent from next changes
                     }
                 }
 
-                if (ShutterStateTemp != ShutterStatePrev)
-                {
-                    Serial.print("State: ");
-                    Serial.println(ShutterStateTemp);
-                }
+                // if (ShutterStateInt != ShutterStatePrev)
+                // {
+                //     Serial.print("State: ");
+                //     Serial.println(ShutterStateInt);
+                // }
 
-                ShutterStatePrev = ShutterStateTemp;
+                ShutterStatePrev = ShutterStateInt;
                 break;
 
             default:
@@ -157,15 +172,69 @@ void EncStateMachine()
     }
     else
     {
-        if (((millis() - lastDebounceTime) > StateChangeThd) && (ButtonState == LOW) && (StateChanged == false))
+        if ((((millis() - lastDebounceTime) > StateChangeThd) && (ButtonState == LOW) && (StateChanged == false)) || (SequenceFinished == true))
         {
             ShutterState = Stop;
             ShutterStatePrev = Stop;
-            ShutterStateTemp = Stop;
+            ShutterStateInt = Stop;
             SettingSelected = Frames;
             CurrFrame = 1;
+            CurrTime = 1;
+            PauseTime = 1;
             StateChanged = true;
-            Serial.println("Return to settings: Frames");
+            ExposureActive = false;
+            PauseActive = false;
+            SequenceFinished = false;
+            // Serial.println("Return to settings: Frames");
+        }
+        else
+        {
+            if ((ExposureActive == false) && (PauseActive == false))
+            {
+                // Serial.print("Start exposure ");
+                // Serial.println(CurrFrame);
+                ExposureActive = true;
+                StartFrameTime = millis();
+                /*Begin exposure*/
+            }
+            else if (PauseActive == false)
+            {
+                CurrTime = (int)(millis() - StartFrameTime)/1000;
+                if ((millis() - StartFrameTime) > (FrameTime * 1000))
+                {
+                    // Serial.print("Start pause ");
+                    // Serial.println(FramePause);
+                    ExposureActive = false;
+                    PauseActive = true;
+                    StartPauseTime = millis();
+                    CurrTime = 1;
+                    /*End exposure*/
+                }
+                else
+                {
+                    //Do nothing, exposure in progress
+                }
+            }
+            else
+            {
+                PauseTime = (int)(millis() - StartPauseTime)/1000;
+                if ((millis() - StartPauseTime) > (FramePause * 1000))
+                {
+                    // Serial.println("Stop pause");
+                    PauseActive = false;
+                    PauseTime = 1;
+                    CurrFrame++;
+                }
+                else
+                {
+                    //Do nothing, pause in progress
+                }
+            }
+
+            if (CurrFrame > FrameCntr)
+            {
+                SequenceFinished = true;
+            }
         }
     }
 
