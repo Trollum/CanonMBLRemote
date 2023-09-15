@@ -2,11 +2,12 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include "CanonBLERemote.h"
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
 
 // Declaration for SSD1306 display
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
 #define OLED_MOSI   23
 #define OLED_CLK   18
 #define OLED_DC    26
@@ -28,11 +29,11 @@ enum Shutter
   Running = 1
 };
 
-int FrameCntr;          //(1-500)
+int FrameCntr;
 int CurrFrame;
-int FrameTime;          //(1-600)
+int FrameTime;
 int CurrTime;
-int FramePause;         //(1-60)
+int FramePause;
 int PauseTime;
 Shutter ShutterState;
 CurrSetting SettingSelected;
@@ -52,6 +53,8 @@ Shutter ShutterStatePrev;
 bool ExposureActive;
 bool PauseActive;
 
+String name_remote = "ESP32 Remote";
+CanonBLERemote canon_ble(name_remote);
 
 void setup() {
   Serial.begin(115200);
@@ -60,8 +63,12 @@ void setup() {
   if(!display.begin(SSD1306_SWITCHCAPVCC))
   {
     Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
   }
+  
+  display.clearDisplay();
+  canon_ble.init();
+  delay(1000);
+  //while(!canon_ble.pair(10));
 
   display.display();
   delay(1000);

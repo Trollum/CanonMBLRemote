@@ -4,6 +4,7 @@
 #define MAXFRAMECNTR 500
 #define MAXFRAMETIME 600
 #define MAXPAUSETIME 60
+#define EXPOSUREADD 100
 
 int FrameCntrPrev;
 int CurrFramePrev;
@@ -174,6 +175,10 @@ void EncStateMachine()
     {
         if ((((millis() - lastDebounceTime) > StateChangeThd) && (ButtonState == LOW) && (StateChanged == false)) || (SequenceFinished == true))
         {
+            if (ExposureActive == true)
+            {
+                canon_ble.trigger();
+            }
             ShutterState = Stop;
             ShutterStatePrev = Stop;
             ShutterStateInt = Stop;
@@ -191,19 +196,21 @@ void EncStateMachine()
         {
             if ((ExposureActive == false) && (PauseActive == false))
             {
-                // Serial.print("Start exposure ");
+                Serial.println("Start exposure ");
                 // Serial.println(CurrFrame);
                 ExposureActive = true;
                 StartFrameTime = millis();
+                canon_ble.trigger();
                 /*Begin exposure*/
             }
             else if (PauseActive == false)
             {
                 CurrTime = (int)(millis() - StartFrameTime)/1000;
-                if ((millis() - StartFrameTime) > (FrameTime * 1000))
+                if ((millis() - StartFrameTime) > ((FrameTime * 1000) + EXPOSUREADD))
                 {
-                    // Serial.print("Start pause ");
+                    Serial.println("Start pause ");
                     // Serial.println(FramePause);
+                    canon_ble.trigger();
                     ExposureActive = false;
                     PauseActive = true;
                     StartPauseTime = millis();
