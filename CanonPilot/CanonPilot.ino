@@ -15,6 +15,11 @@
 #define OLED_RESET 16
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
+// Encoder pins
+#define outputA 21
+#define outputB 17
+#define EncoderButton 22
+
 enum CurrSetting
 {
   Frames = 0,
@@ -56,7 +61,10 @@ bool PauseActive;
 String name_remote = "ESP32 Remote";
 CanonBLERemote canon_ble(name_remote);
 
-void setup() {
+void setup()
+{
+  int ButtonState;
+  
   Serial.begin(115200);
   InitEncoder();
 
@@ -68,10 +76,28 @@ void setup() {
   display.clearDisplay();
   canon_ble.init();
   delay(1000);
-  //while(!canon_ble.pair(10));
 
-  display.display();
-  delay(1000);
+  ButtonState = digitalRead(EncoderButton);
+  if (ButtonState == LOW)
+  {
+    display.setTextSize(2);
+    display.print("PAIRING");
+    display.display();
+    delay(500);
+
+    for (int i = 0; i < 3; i++)
+    {
+      if (!canon_ble.pair(10))
+      {
+        continue;
+      }       
+      else
+      {
+        break;
+      }
+    }
+  }
+
   display.clearDisplay();
 }
 

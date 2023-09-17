@@ -1,6 +1,3 @@
-#define outputA 21
-#define outputB 17
-#define EncoderButton 22
 #define MAXFRAMECNTR 500
 #define MAXFRAMETIME 600
 #define MAXPAUSETIME 60
@@ -28,7 +25,7 @@ void InitEncoder()
 {
     FrameCntr = 1;
     CurrFrame = 1;
-    FrameTime = 1;
+    FrameTime = 0;
     CurrTime = 1;
     FramePause = 1;
     PauseTime = 1;
@@ -103,7 +100,7 @@ void EncStateMachine()
 
             case Duration:
                 FrameTime = UpdateEncoder(FrameTime);
-                FrameTime = RangeLimiter(FrameTime, 1, MAXFRAMETIME);
+                FrameTime = RangeLimiter(FrameTime, 0, MAXFRAMETIME);
 
                 if (((millis() - lastDebounceTime) > SettingChangeThd) && (ButtonState == LOW) && (StateChanged == false))
                 {
@@ -198,9 +195,18 @@ void EncStateMachine()
             {
                 Serial.println("Start exposure ");
                 // Serial.println(CurrFrame);
-                ExposureActive = true;
                 StartFrameTime = millis();
                 canon_ble.trigger();
+
+                if (FrameTime == 0)
+                {
+                    PauseActive = true;
+                    StartPauseTime = millis();
+                }
+                else
+                {
+                    ExposureActive = true;
+                }
                 /*Begin exposure*/
             }
             else if (PauseActive == false)
