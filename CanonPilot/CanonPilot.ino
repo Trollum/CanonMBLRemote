@@ -13,6 +13,7 @@
 #define OLED_DC    26
 #define OLED_CS    5
 #define OLED_RESET 16
+#define DISPLAY_UPDATE_RATE 100
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 // Encoder pins
@@ -51,6 +52,7 @@ int FramePauseTemp;
 int PauseTimeTemp;
 CurrSetting SettingSelectedTemp;
 Shutter ShutterStateTemp;
+unsigned long DisplayTimer;
 
 Shutter ShutterStateInt;
 Shutter ShutterStatePrev;
@@ -99,13 +101,18 @@ void setup()
   }
 
   display.clearDisplay();
+  DisplayTimer = millis();
 }
 
 void loop()
 {
+  if ((millis() - DisplayTimer) > DISPLAY_UPDATE_RATE)
+  {
+      DisplayTimer = millis();
+      UpdateDisplay();
+  }
+
   EncStateMachine();
-  UpdateDisplay();
-  //delay(2);
 }
 
 void UpdateDisplay()
@@ -217,6 +224,17 @@ void UpdateDisplay()
         display.print(DispCurrTime);
         display.print("/");
         display.println(DispFrameTime);
+      }
+      else if (FrameTime == 0)
+      {
+        display.setTextSize(3);
+        display.print(F("EXP."));
+        display.println(DispCurrFrame);
+        display.setTextSize(2);
+        display.print("   ");
+        display.print(DispPauseTime);
+        display.print("/");
+        display.println(DispFramePause);
       }
       else if (PauseActive == true)
       {
